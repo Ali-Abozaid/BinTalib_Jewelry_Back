@@ -89,8 +89,17 @@ public class Program
 
         app.UseCors(CorsPolicy);
 
-        var uploadsRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        Directory.CreateDirectory(Path.Combine(uploadsRoot, "uploads"));
+        var webRoot = string.IsNullOrEmpty(app.Environment.WebRootPath)
+            ? Path.Combine(app.Environment.ContentRootPath, "wwwroot")
+            : app.Environment.WebRootPath;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not ensure uploads directory at {Path}", webRoot);
+        }
         app.UseStaticFiles();
 
         app.UseAuthentication();
@@ -98,8 +107,16 @@ public class Program
 
         app.MapControllers();
         app.MapGet("/", () => Results.Redirect("/swagger"));
+        app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
-        await DbSeeder.SeedAsync(app.Services);
+        try
+        {
+            await DbSeeder.SeedAsync(app.Services);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Database seeding failed at startup. The app will continue to run.");
+        }
 
         await app.RunAsync();
     }

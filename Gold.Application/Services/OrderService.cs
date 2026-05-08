@@ -85,17 +85,22 @@ public class OrderService : IOrderService
         }
 
         Workshop? workshop = null;
-        if (dto.WorkshopId.HasValue)
+        var externalProviderName = dto.IsExternal ? dto.ExternalProviderName?.Trim() : null;
+
+        if (!dto.IsExternal)
         {
-            workshop = await _uow.Workshops.GetByIdAsync(dto.WorkshopId.Value, cancellationToken);
-        }
-        else if (!string.IsNullOrWhiteSpace(dto.NewWorkshopName))
-        {
-            workshop = await _uow.Workshops.GetByNameAsync(dto.NewWorkshopName.Trim(), cancellationToken);
-            if (workshop is null)
+            if (dto.WorkshopId.HasValue)
             {
-                workshop = new Workshop { Name = dto.NewWorkshopName.Trim() };
-                await _uow.Workshops.AddAsync(workshop, cancellationToken);
+                workshop = await _uow.Workshops.GetByIdAsync(dto.WorkshopId.Value, cancellationToken);
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.NewWorkshopName))
+            {
+                workshop = await _uow.Workshops.GetByNameAsync(dto.NewWorkshopName.Trim(), cancellationToken);
+                if (workshop is null)
+                {
+                    workshop = new Workshop { Name = dto.NewWorkshopName.Trim() };
+                    await _uow.Workshops.AddAsync(workshop, cancellationToken);
+                }
             }
         }
 
@@ -112,17 +117,22 @@ public class OrderService : IOrderService
             Workshop = workshop,
             WorkshopId = workshop?.Id,
             ReceivingEmployeeName = dto.ReceivingEmployeeName,
-            WorkshopCourierName = dto.WorkshopCourierName,
+            WorkshopCourierName = dto.IsExternal ? null : dto.WorkshopCourierName,
             WeightBefore = dto.WeightBefore,
             ImageBeforeUrl = dto.ImageBeforeUrl,
             PricingType = dto.PricingType,
             Price = dto.PricingType == PricingType.Workshop ? null : dto.Price,
-            DeliveryToWorkshopDate = dto.DeliveryToWorkshopDate,
+            DeliveryToWorkshopDate = dto.IsExternal ? null : dto.DeliveryToWorkshopDate,
             Notes = dto.Notes,
+            IsExternal = dto.IsExternal,
+            ExternalProviderName = externalProviderName,
             Status = OrderStatus.Created
         };
 
-        order.StatusHistory.Add(BuildHistory(order, OrderStatus.Created, "Order created at branch"));
+        var createdNote = dto.IsExternal && !string.IsNullOrWhiteSpace(externalProviderName)
+            ? $"Order created at branch (external workshop: {externalProviderName})"
+            : "Order created at branch";
+        order.StatusHistory.Add(BuildHistory(order, OrderStatus.Created, createdNote));
 
         if (workshop is not null)
         {
@@ -132,6 +142,88 @@ public class OrderService : IOrderService
         }
 
         await _uow.Orders.AddAsync(order, cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
+
+        var saved = await _uow.Orders.GetByIdWithRelationsAsync(order.Id, cancellationToken);
+        return Result<OrderDto>.Success(saved!.ToDto());
+    }
+
+    public async Task<Result<OrderDto>> AssignWorkshopAsync(Guid orderId, AssignWorkshopDto dto, CancellationToken cancellationToken = default)
+    {
+        var order = await _uow.Orders.GetByIdWithRelationsAsync(orderId, cancellationToken);
+        if (order is null)
+        {
+            return Result<OrderDto>.Failure("Order not found");
+        }
+
+        if (order.Status != OrderStatus.Created)
+        {
+            return Result<OrderDto>.Failure("Workshop can only be determined for newly created orders");
+        }
+
+        if (dto.IsExternal)
+        {
+            var name = dto.ExternalProviderName?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return Result<OrderDto>.Failure("External workshop name is required");
+            }
+
+            order.IsExternal = true;
+            order.ExternalProviderName = name;
+            order.Workshop = null;
+            order.WorkshopId = null;
+            order.WorkshopCourierName = null;
+            order.DeliveryToWorkshopDate = null;
+            order.Status = OrderStatus.SentToExternal;
+
+            var note = $"Sent to external workshop: {name}";
+            if (!string.IsNullOrWhiteSpace(dto.Note))
+            {
+                note = $"{note}. {dto.Note}";
+            }
+            order.StatusHistory.Add(BuildHistory(order, OrderStatus.SentToExternal, note));
+        }
+        else
+        {
+            Workshop? workshop = null;
+            if (dto.WorkshopId.HasValue)
+            {
+                workshop = await _uow.Workshops.GetByIdAsync(dto.WorkshopId.Value, cancellationToken);
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.NewWorkshopName))
+            {
+                var newName = dto.NewWorkshopName.Trim();
+                workshop = await _uow.Workshops.GetByNameAsync(newName, cancellationToken);
+                if (workshop is null)
+                {
+                    workshop = new Workshop { Name = newName };
+                    await _uow.Workshops.AddAsync(workshop, cancellationToken);
+                }
+            }
+
+            if (workshop is null)
+            {
+                return Result<OrderDto>.Failure("Choose a workshop or enter a new workshop name");
+            }
+
+            order.IsExternal = false;
+            order.ExternalProviderName = null;
+            order.Workshop = workshop;
+            order.WorkshopId = workshop.Id;
+            order.WorkshopCourierName = dto.WorkshopCourierName;
+            order.DeliveryToWorkshopDate = dto.DeliveryToWorkshopDate;
+            order.Status = OrderStatus.SentToWorkshop;
+
+            var note = $"Sent to workshop {workshop.Name} (courier: {dto.WorkshopCourierName ?? "-"})";
+            if (!string.IsNullOrWhiteSpace(dto.Note))
+            {
+                note = $"{note}. {dto.Note}";
+            }
+            order.StatusHistory.Add(BuildHistory(order, OrderStatus.SentToWorkshop, note));
+        }
+
+        _uow.Orders.Update(order);
         await _uow.SaveChangesAsync(cancellationToken);
 
         var saved = await _uow.Orders.GetByIdWithRelationsAsync(order.Id, cancellationToken);

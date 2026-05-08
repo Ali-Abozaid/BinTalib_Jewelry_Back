@@ -64,6 +64,9 @@ public class CreateOrderDto
     public string? NewWorkshopName { get; set; }
     public string? WorkshopCourierName { get; set; }
 
+    public bool IsExternal { get; set; }
+    public string? ExternalProviderName { get; set; }
+
     public decimal WeightBefore { get; set; }
     public string? ImageBeforeUrl { get; set; }
 
@@ -93,6 +96,19 @@ public class ReceiveFromWorkshopDto
 public class MoveToExternalDto
 {
     public string ExternalProviderName { get; set; } = string.Empty;
+    public string? Note { get; set; }
+}
+
+public class AssignWorkshopDto
+{
+    public bool IsExternal { get; set; }
+
+    public Guid? WorkshopId { get; set; }
+    public string? NewWorkshopName { get; set; }
+    public string? WorkshopCourierName { get; set; }
+    public DateTime? DeliveryToWorkshopDate { get; set; }
+
+    public string? ExternalProviderName { get; set; }
     public string? Note { get; set; }
 }
 

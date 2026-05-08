@@ -24,7 +24,12 @@ public static class DependencyInjection
             switch (provider.ToLowerInvariant())
             {
                 case "sqlserver":
-                    options.UseSqlServer(configuration.GetConnectionString("Default"));
+                    options.UseSqlServer(
+                        configuration.GetConnectionString("Default"),
+                        sql => sql.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(10),
+                            errorNumbersToAdd: null));
                     break;
                 case "sqlite":
                 default:
@@ -55,7 +60,6 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddHttpContextAccessor();
-        services.AddAuthentication();
 
         services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
         var jwt = configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings

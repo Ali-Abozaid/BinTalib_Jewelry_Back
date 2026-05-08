@@ -1,4 +1,5 @@
 using Gold.Application.Interfaces;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 
 namespace Gold.Infrastructure.Services;
@@ -8,12 +9,25 @@ public class LocalFileStorageService : IFileStorageService
     private readonly string _rootPath;
     private readonly string _publicBaseUrl;
 
-    public LocalFileStorageService(IConfiguration configuration)
+    public LocalFileStorageService(IConfiguration configuration, IWebHostEnvironment environment)
     {
-        _rootPath = configuration["Storage:RootPath"]
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+        var defaultRoot = Path.Combine(
+            string.IsNullOrEmpty(environment.WebRootPath)
+                ? Path.Combine(environment.ContentRootPath, "wwwroot")
+                : environment.WebRootPath,
+            "uploads");
+
+        _rootPath = configuration["Storage:RootPath"] ?? defaultRoot;
         _publicBaseUrl = configuration["Storage:PublicBaseUrl"] ?? "/uploads";
-        Directory.CreateDirectory(_rootPath);
+
+        try
+        {
+            Directory.CreateDirectory(_rootPath);
+        }
+        catch
+        {
+            // Ignored: directory may be read-only on shared hosts; uploads will fail gracefully when used.
+        }
     }
 
     public async Task<string> SaveAsync(Stream content, string originalFileName, string subfolder, CancellationToken cancellationToken = default)

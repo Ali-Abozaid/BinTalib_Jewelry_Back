@@ -12,6 +12,7 @@ public interface IOrderService
     Task<Result<OrderStatsDto>> GetStatsAsync(CancellationToken cancellationToken = default);
 
     Task<Result<OrderDto>> CreateAsync(CreateOrderDto dto, CancellationToken cancellationToken = default);
+    Task<Result<OrderDto>> AssignWorkshopAsync(Guid orderId, AssignWorkshopDto dto, CancellationToken cancellationToken = default);
     Task<Result<OrderDto>> WorkshopUpdateAsync(Guid orderId, WorkshopUpdateDto dto, CancellationToken cancellationToken = default);
     Task<Result<OrderDto>> ReceiveFromWorkshopAsync(Guid orderId, ReceiveFromWorkshopDto dto, CancellationToken cancellationToken = default);
     Task<Result<OrderDto>> MoveToExternalAsync(Guid orderId, MoveToExternalDto dto, CancellationToken cancellationToken = default);

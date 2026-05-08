@@ -57,6 +57,11 @@ public class OrdersController : BaseApiController
         return ToActionResult(await _orders.CreateAsync(dto, ct));
     }
 
+    [HttpPut("{id:guid}/assign-workshop")]
+    [Authorize(Roles = "Admin,Branch")]
+    public async Task<IActionResult> AssignWorkshop(Guid id, [FromBody] AssignWorkshopDto dto, CancellationToken ct)
+        => ToActionResult(await _orders.AssignWorkshopAsync(id, dto, ct));
+
     [HttpPut("{id:guid}/workshop")]
     [Authorize(Roles = "Admin,Workshop")]
     public async Task<IActionResult> WorkshopUpdate(Guid id, [FromBody] WorkshopUpdateDto dto, CancellationToken ct)
